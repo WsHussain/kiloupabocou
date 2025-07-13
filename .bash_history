@@ -272,3 +272,8 @@ git commit -m "initial commit"
 git status
 git add .bashrc
 git commit -m "update .bashrc"
+git add .bash_history
+git commit -m "add .bash_history"
+git status
+git add .bashrc
+git commit -m "update .bashrc"
