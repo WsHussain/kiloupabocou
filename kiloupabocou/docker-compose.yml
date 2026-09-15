@@ -1,0 +1,119 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: kiloupabocou_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - kiloupabocou
+
+  php:
+    build:
+      context: ./php
+    container_name: kiloupabocou_php
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    environment:
+      DATABASE_URL: "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}?serverVersion=8.0&charset=utf8mb4"
+      APP_ENV: ${APP_ENV}
+      APP_SECRET: ${APP_SECRET}
+    volumes:
+      - ./symfony-app:/var/www/symfony
+      - symfony_logs:/var/www/symfony/var/log
+    expose:
+      - "9000"
+    networks:
+      - kiloupabocou
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: kiloupabocou_nginx
+    restart: unless-stopped
+    depends_on:
+      - php
+    ports:
+      - "80:80"
+    volumes:
+      - ./symfony-app:/var/www/symfony:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - nginx_logs:/var/log/nginx
+    networks:
+      - kiloupabocou
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+    container_name: kiloupabocou_elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - kiloupabocou
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.14.3
+    container_name: kiloupabocou_logstash
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - logstash_data:/usr/share/logstash/data
+    ports:
+      - "5044:5044"
+    networks:
+      - kiloupabocou
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.3
+    container_name: kiloupabocou_kibana
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - kiloupabocou
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.14.3
+    container_name: kiloupabocou_filebeat
+    restart: unless-stopped
+    user: root
+    command: ["--strict.perms=false", "-e"]
+    depends_on:
+      - logstash
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - nginx_logs:/var/log/nginx:ro
+      - symfony_logs:/var/log/symfony:ro
+    networks:
+      - kiloupabocou
+
+networks:
+  kiloupabocou:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  symfony_logs:
+  nginx_logs:
+  es_data:
+  logstash_data:

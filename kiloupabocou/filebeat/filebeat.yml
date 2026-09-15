@@ -1,0 +1,15 @@
+filebeat.inputs:
+  - type: filestream
+    id: nginx-logs
+    enabled: true
+    paths:
+      - /var/log/nginx/*.log
+
+  - type: filestream
+    id: symfony-logs
+    enabled: true
+    paths:
+      - /var/log/symfony/*.log
+
+output.logstash:
+  hosts: ["logstash:5044"]
